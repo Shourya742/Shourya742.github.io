@@ -1,6 +1,6 @@
 ---
 layout: "post"
-title:  "Relational Operators: The Building Blocks of Queries"
+title:  "Why Do Databases Need a Query Planner?"
 date:   "2025-12-19 11:23:35 +0530"
 categories: database
 --- 
