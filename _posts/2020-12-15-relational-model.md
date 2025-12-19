@@ -1,7 +1,7 @@
 ---
 layout: "post"
 title:  "Relational Operators: The Building Blocks of Queries"
-date:   "2025-12-15 12:21:35 +0530"
+date:   "2020-12-15 12:21:35 +0530"
 categories: database
 --- 
 
