@@ -13,7 +13,7 @@ But let's step back for a moment. How would you do it yourself?
 
 ## Encryption
 
-The most straightforward idea is to speak in a code (cipher) known only to you and the website. One side scrambles the message into something unreadable (encryption), and the other unscrambles it(decryption). This is a good starting point, but it quickly runs into issues. First, the code(cipher) must be sufficiently complex or it will eventually be broken (“use one letter over” becomes painfully obvious after a while). Second, the same code cannot be reused everywhere, or it stops being secret.
+The most straightforward idea is to speak in a code (cipher) known only to you and the peer. One side scrambles the message into something unreadable (encryption), and the other unscrambles it(decryption). This is a good starting point, but it quickly runs into issues. First, the code(cipher) must be sufficiently complex or it will eventually be broken (“use one letter over” becomes painfully obvious after a while). Second, the same code cannot be reused everywhere, or it stops being secret.
 
 So instead, we generate a fresh code randomly and uniquely for each connection.
 
@@ -72,7 +72,7 @@ Alright, but how do we the shared secret key from being compromised?
 
 Honestly? Not much you can do besides agreeing to something beforehand. A bit disappointing that there's no clever solution here, but think about it: you can't know you're talking to someone if you don't already know who they are.
 
-So then the straight-foward approach is Pre-Shared-keys (PSK) that both sides would either put directly into AEAD (skipping key exchange), or use randomize Diffie-Hellman shared secret result.
+So then the straight-foward approach is Pre-Shared-keys (PSK) that both sides would either put directly into AEAD (skipping key exchange), and use randomize Diffie-Hellman shared secret result.
 
 In practise, Noise usually avoids shared secrets and instead relies on identities. Rather than agreeing on a secret ahead of time, one side can know the other's public key in advance or learn it once and remember it for future connections. This still requires prior agreement, but only on public information, which scales far better and does not need to be kept confidential.
 
