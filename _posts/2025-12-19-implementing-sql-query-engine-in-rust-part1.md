@@ -5,8 +5,6 @@ date:   "2025-12-19 11:23:35 +0530"
 categories: database
 --- 
 
-# Implementing SQL Query Engine with Rust
-
 To learn about query engines, I've recently been implementing [Query engine](https://github.com/Shourya742/query_engine) from scratch. This part will detail its overall architecture, as well as the implementation of basic SQL `SELECT c1 from t where c2 = 1` queries `select c1, count(c2) max(c2) from t group by c1.`
 
 This part involves:

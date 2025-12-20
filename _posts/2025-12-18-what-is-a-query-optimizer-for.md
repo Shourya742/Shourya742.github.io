@@ -5,8 +5,6 @@ date:   "2025-12-18 11:23:35 +0530"
 categories: database
 --- 
 
-# Why Do Databases Need a Query Planner?
-
 You could be forgiven for thinking that a "query optimizer" is a component of a database that takes a query plan and makes it better, hance, the typical programmer definition of "optimize." This is not really how the term is used in practice, and "query optimizer" is really pretty synonymous with "query planner." I think "query planner" is a better term so I'm going to use that.
 
 SQL is fundamentally designed such that users express what data they want rather than an algorithm for retrieving it, and this property gives us I think, the most basic definition of a query planner's job:
