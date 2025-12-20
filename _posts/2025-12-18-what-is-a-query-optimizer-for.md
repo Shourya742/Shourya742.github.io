@@ -1,7 +1,7 @@
 ---
 layout: "post"
 title:  "Why Do Databases Need a Query Planner?"
-date:   "2025-12-19 11:23:35 +0530"
+date:   "2025-12-18 11:23:35 +0530"
 categories: database
 --- 
 

@@ -1,7 +1,7 @@
 ---
 layout: "post"
 title:  "Implementing SQL Query Engine with Rust"
-date:   "2025-12-20 11:23:35 +0530"
+date:   "2025-12-19 11:23:35 +0530"
 categories: database
 --- 
 
