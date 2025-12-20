@@ -76,14 +76,6 @@ So then the straight-foward approach is Pre-Shared-keys (PSK) that both sides wo
 
 In practise, Noise usually avoids shared secrets and instead relies on identities. Rather than agreeing on a secret ahead of time, one side can know the other's public key in advance or learn it once and remember it for future connections. This still requires prior agreement, but only on public information, which scales far better and does not need to be kept confidential.
 
-# Handshake Patterns
-
-Noise defines handshakes as precise sequence of cryptographic operations called patterns.
-
-A pattern specifies which keys are sent, in what order, and at what point encryption begins. It also determines whether identities are revealed early or only after confidentiality is established. Nothing is negotiated implicitly; the security properties are fixed by the chosen pattern.
-
-By selecting a pattern, we are explicitly choosing the guarantees our connection provides.
-
 # Closing
 
 That, at a high level, is how Noise establishes private communication over an untrusted network.
