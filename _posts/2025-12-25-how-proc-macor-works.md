@@ -333,3 +333,191 @@ Now to summarize, a procedural macro structure is built from the following block
 * TokenTree is an enum of 3 token types plus a Group
 * A Group is formed by brackets.
 * Each token has a Span, which is used for error mapping.
+
+## Compilation of procedural macros
+
+To start, let's see how we might write `Hello, world` program using a separate crate inside a procedural macro:
+
+> proc-macro-example/Cargo.toml
+```toml
+[package]
+name = "proc-macro-example"
+edition = "2024"
+
+[lib]
+path = "proc-macro-example"
+```
+
+> proc-macro-example/main.rs
+```rust
+extern crate proc_macro;
+use proc_macro::TokenStream;
+
+#[proc_macro]
+pub fn foo(body:  TokenStream) {
+    body
+}
+```
+
+> hello/Cargo.toml
+```toml
+[package]
+name = "hello"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies.proc-macro-example]
+path = "proc-macro-example"
+```
+> hello/main.rs
+```rust
+use proc_macro_example::foo;
+
+foo! {}
+
+fn main() {
+    println!("Hello, World!");
+}
+```
+
+In order to build this project, Cargo performs 2 calls to rustc:
+
+```ini
+cargo build -vv
+
+rustc
+    --crate-name proc-macro-example
+    --crate-type proc-macro
+    --out-dir ./target/debug/deps
+    proc-macro-example/src/lib.rs
+
+rustc
+    --crate-name hello
+    --crate-type bin
+    --out-dir ./target/debug/deps
+    --extern proc-macro-example = ./target/debug/deps/libproc_macro_example-547aff81ea3cda77.so
+    src/main.rs
+```
+During the first call to rustc, Cargo passes the procedural macro source with the `--crate-type proc-macro` flag. As a result, the compiler creates a dynamic library, which will be then passed to the second call along with the initial `Hello, World` source to build the actual binary. We can see that in the last line of the second call:
+```ini
+        --extern proc-macro-example = ./target/debug/deps/libproc_macro_example-547aff81ea3cda77.so
+    src/main.rs
+```
+
+This is how the process can be illustrated.
+
+Here's the first call to rustc:
+
+![alt text](<../assets/posts/Screenshot from 2025-12-27 12-28-51.png>)
+
+Here's the second call to rustc:
+![alt text](<../assets/posts/Screenshot from 2025-12-27 12-34-36.png>)
+![alt text](<../assets/posts/Screenshot from 2025-12-27 12-35-46.png>)
+![alt text](<../assets/posts/Screenshot from 2025-12-27 12-36-20.png>)
+![alt text](<../assets/posts/Screenshot from 2025-12-27 12-37-14.png>)
+
+## First call to rustc: dynamic library
+
+The intermediary dynamic library includes a special symbol, `__rustc_proc_macro_decls_***_`, which contains an array of macros declared in the project.
+
+This is what a procedural macro's code could look like after certain changes that rustc makes during compiling:
+```rust
+extern crate proc_macro;
+use proc_macro::TokenStream;
+
+pub fn foo(body: TokenStream) -> TokenStream {
+    body
+}
+
+use proc_macro::bridge::client::ProcMacro;
+#[no_mangle]
+static __rustc_proc_macro_decls_2db78d2d43c54ae0__: &[ProcMacro] = &[
+    ProcMacro::bang("foo", crate::foo)
+];
+```
+
+The `ProcMacro` array includes the information on macro types and names, as well as references to procedural macro functions (`crate::foo`).
+
+The `__rustc_proc_macro_decls_***__` symbol is exported from the dynamic library, and rustc finds it during the second call.
+
+## Second call to rustc: ABI 
+
+During the second call, rustc finds the `__rustc_proc_macro_decls_***_` symbol and recognizes a function reference there.
+
+At this point, we might expect the compiler to command the dynamic library to expand the macro using the given TokenStream:
+
+![alt text](<../assets/posts/Screenshot from 2025-12-27 13-16-56.png>)
+
+However, this can't be done due to the fact that Rust doesn't have a stable ABI. An ABI - Application Binary interface - includes calling conventions (like the order in which structure fields are placed in memory). In order for a function to be called from a dynamic library, its ABI should be known to the compiler.
+
+Rust's ABI is not fixed, meaning that it can change with each new compiler version. So there are two requirements for dynamic library's ABI and the program's ABI to match:
+
+1. Both the library and the program should be compiled using the same compiler version.
+
+2. The codegen backend of the compiler should also be the same.
+
+As we know, rustc is compiled by itself. When a new compiler version is release, it is first compiled by the previous version, and then compiled by itself. Similarly, in the case of our procedural macro library, it is compiled by the compiler, which it is then linked into. SO it seems that rustc and procedural macros are compiled using the same compiler version, and their ABI's should match. But here comes the second of the equation - the codegen backend.
+
+
+**Rustc codegen backend and proc macros**
+
+This is where it's helpful to take a look at how things used to work. Prior to 2018, Rust's ABI had been used for procedural macros, but then it was decided that the compiler's backend should be modifiable. Today, although the default rustc backend is LLVM-based, there are alternative builds like Cranelift or others - with a GCC backend.
+
+How is it possible to add more backends to the compiler while simultaneously keeping procedural macros working?
+
+There are two solutions that seem to be obvious, but they have their flaws:
+
+* C ABI
+
+In the case of C ABI, a function should be prepended with `extern "C"`:
+
+`extern "C" fn foo() { ... }`
+
+This kind of function can take C types or the types declared with the `repr(C)` attribute:
+
+`#[repr(C)] struct Foo { ... }`
+
+* Full serialization of macro-related types
+
+In this case, macro-related types like TokenStream would be serialized and then passed to the dynamic library. The macro would de-serialize them back to their inner types, call the function, and then serialize the result to pass them back to the compiler:
+
+![alt text](<../assets/posts/Screenshot from 2025-12-27 13-47-18.png>)
+
+But it is not that simple. The correct solution came in pull request [#49219](https://github.com/rust-lang/rust/pull/49219) called "Decouple proc_macro from the rest of the compiler". The actual process adopted in rustc is as follows:
+
+1. Before rustc calls a procedural macro, it puts the TokenStream into the table of handles with a specific id. Then the procedural macro is called with that id instead of a whole data structure.
+
+2. On the dynamic library's side, the id is wrapped into the library's inner tokenStream type. Then, when the method of that TokenStream is called, that call is passed back to rustc with the id and the method name.
+
+3. Using the id, rustc takes the original tokenStream from the table of handles and calls the method on it. The result goes to the table of handles and gets the id that is used for further operations on that result, and so on.
+
+![alt text](<../assets/posts/Screenshot from 2025-12-27 13-58-15.png>)
+
+How is this approach better than the simpler version with full serialization of all structures or C ABI?
+
+* Spans link a lot of compiler inner types, which are better left unexposed. Also, implementation of serialization for all of those inner types would be expensive.
+* This approach allows backcalls (the procedural macro might want to ask the compiler for some additional action).
+* With this approach, macros can (in theory) be extracted into a separate process or be executed on a virtual machine.
+
+## Proc macros and potentially dangerous code
+
+As we saw, a procedural macro is essentially a dynamic library linked to the compiler. That library can execute arbitrary - and potentially dangerous - code. For example, that code could segfault, causing the compiler to segfault too, or call system fork and duplicate the compiler.
+
+Aside from this apparently dangerous behavior, procedural macros can also make other system calls, such as accessing a file system or the web. These calls are not necessarily unsafe, but might not be good practice in the first place.
+
+## Procedural macros in rust-analyzer
+
+In order for the rust-analyzer to analyze procedural macros on the fly, it needs to have the code of expansion on hand all the time.
+
+In case of declarative macros, the LSP can expand macros by itself. But in the case of procedural macros, it needs to load the dynamic library and perform the actual macro calls.
+
+One approach might be to simply replace the compiler with the LSP, keeping the same workflow as described above. However, bear in mind that a procedural macro can segfault (and cause the LSP to segfault) or, or example, occupy a lot of memory, and the LSP will fail with out-of-memory errors. For these reasons, procedural macro expansion must be extracted into another process separate from the LSP.
+
+That process is called the `expander`. It links the dynamic library and uses the same interface as the compiler to interact with procedural macros. Communication between the LSP and expander is performed using full data serialization.
+
+
+![alt text](<../assets/posts/Screenshot from 2025-12-27 14-17-17.png>)
+
+---
+
+And this is how procedural macros work!!!
